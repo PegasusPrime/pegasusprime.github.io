@@ -1,0 +1,925 @@
+<?xml version="1.0" encoding="UTF-8"?><rss xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:content="http://purl.org/rss/1.0/modules/content/" xmlns:atom="http://www.w3.org/2005/Atom" version="2.0" xmlns:media="http://search.yahoo.com/mrss/"><channel><title><![CDATA[Brian's Blog]]></title><description><![CDATA[Mainly kubernetes yaml]]></description><link>https://teada.net/</link><image><url>https://teada.net/favicon.png</url><title>Brian&apos;s Blog</title><link>https://teada.net/</link></image><generator>Ghost 6.19</generator><lastBuildDate>Sun, 15 Mar 2026 20:59:47 GMT</lastBuildDate><atom:link href="https://teada.net/rss/" rel="self" type="application/rss+xml"/><ttl>60</ttl><item><title><![CDATA[Proxmox - Install ceph after the fact]]></title><description><![CDATA[<p>Stole from <a href="https://forum.proxmox.com/threads/ceph-osd-on-lvm-logical-volume.68618/?ref=teada.net">https://forum.proxmox.com/threads/ceph-osd-on-lvm-logical-volume.68618/</a></p><pre><code>1. During install set maxvz to 0 to not create local storage and keep free space for Ceph on the OS drive. [GUIDE, 2.3.1 Advanced LVM Configuration Options ]
+2. Setup Proxmox like usual and create a cluster
+3. Install</code></pre>]]></description><link>https://teada.net/proxmox-install-ceph-after-the-fact/</link><guid isPermaLink="false">68fbfcde7445aa000189222f</guid><dc:creator><![CDATA[Brian]]></dc:creator><pubDate>Fri, 24 Oct 2025 22:26:03 GMT</pubDate><content:encoded><![CDATA[<p>Stole from <a href="https://forum.proxmox.com/threads/ceph-osd-on-lvm-logical-volume.68618/?ref=teada.net">https://forum.proxmox.com/threads/ceph-osd-on-lvm-logical-volume.68618/</a></p><pre><code>1. During install set maxvz to 0 to not create local storage and keep free space for Ceph on the OS drive. [GUIDE, 2.3.1 Advanced LVM Configuration Options ]
+2. Setup Proxmox like usual and create a cluster
+3. Install Ceph packages and do initial setup (network interfaces etc.) via GUI, also create Managers and Monitors
+4. To create OSDs open a shell on each node and
+
+4.a. bootstrap auth [4]:
+ceph auth get client.bootstrap-osd &gt; /var/lib/ceph/bootstrap-osd/ceph.keyring
+
+4.b. Create new logical volume with the remaining free space:
+lvcreate -l 100%FREE -n pve/vz
+
+4.c. Create (= prepare and activate) the logical volume for OSD [2] [3]
+ceph-volume lvm create --data pve/vz</code></pre>]]></content:encoded></item><item><title><![CDATA[What am I doing?]]></title><description><![CDATA[<p>I have no idea. I have re-built my homelab multiple times. Right now it is just a 3x N150 Proxmox cluster running Pihole and Tautulli on top of Fedora CoreOS. Is it overkill? Yes, but that is part of the experience.</p>]]></description><link>https://teada.net/what-am-i-doing/</link><guid isPermaLink="false">68fbfbc57445aa0001892221</guid><dc:creator><![CDATA[Brian]]></dc:creator><pubDate>Fri, 24 Oct 2025 22:22:37 GMT</pubDate><content:encoded><![CDATA[<p>I have no idea. I have re-built my homelab multiple times. Right now it is just a 3x N150 Proxmox cluster running Pihole and Tautulli on top of Fedora CoreOS. Is it overkill? Yes, but that is part of the experience.</p>]]></content:encoded></item><item><title><![CDATA[Duplicate posts]]></title><description><![CDATA[<p>Finally cleaned up the duplicate posts from a migration error. Happy 2025!</p>]]></description><link>https://teada.net/duplicate-posts/</link><guid isPermaLink="false">68fbfb4a7445aa0001892218</guid><dc:creator><![CDATA[Brian]]></dc:creator><pubDate>Fri, 24 Oct 2025 22:19:16 GMT</pubDate><content:encoded><![CDATA[<p>Finally cleaned up the duplicate posts from a migration error. Happy 2025!</p>]]></content:encoded></item><item><title><![CDATA[K3s cluster setup guide]]></title><description><![CDATA[<p>Mainly a brain dump for my home lab<br></p><pre><code class="language-yaml">owner@DESKTOP-0V6SF20:~$ k3sup install --ip=192.168.50.76 --user=root --tls-san=192.168.50.200 --cluster --k3s-channel=stable --k3s-extra-args &quot;--disable=traefik
+--disable=servicelb --disable=local-storage --node-ip=192.168.50.76&quot; --local-path $HOME/.kube/config --context=k3s-ha --ssh-key /home/owner/</code></pre>]]></description><link>https://teada.net/k3s-cluster-setup-guide/</link><guid isPermaLink="false">64f9e5eadbcfb0000166e241</guid><dc:creator><![CDATA[Brian]]></dc:creator><pubDate>Thu, 16 Feb 2023 13:44:36 GMT</pubDate><content:encoded><![CDATA[<p>Mainly a brain dump for my home lab<br></p><pre><code class="language-yaml">owner@DESKTOP-0V6SF20:~$ k3sup install --ip=192.168.50.76 --user=root --tls-san=192.168.50.200 --cluster --k3s-channel=stable --k3s-extra-args &quot;--disable=traefik
+--disable=servicelb --disable=local-storage --node-ip=192.168.50.76&quot; --local-path $HOME/.kube/config --context=k3s-ha --ssh-key /home/owner/.ssh/id_ed25519
+
+# ssh to the master node, deploy the ha-vip
+ssh 192.168.50.76..
+kubectl apply -f https://kube-vip.io/manifests/rbac.yaml
+ctr image pull docker.io/plndr/kube-vip:v0.5.8
+alias kube-vip=&quot;ctr run --rm --net-host docker.io/plndr/kube-vip:v0.5.8 vip /kube-vip&quot;
+kube-vip manifest daemonset \
+    --arp \
+    --interface eth0 \
+    --address 192.168.50.200 \
+    --controlplane \
+    --leaderElection \
+    --taint \
+    --inCluster | tee /var/lib/rancher/k3s/server/manifests/kube-vip.yaml
+# back on owner, join new HA nodes
+owner@DESKTOP-0V6SF20:~$ k3sup join --ip=192.168.50.79 --user=root --k3s-channel stable --server --server-ip 192.168.50.200 --k3s-extra-args &quot;--disable=traefik --disable=servicelb --disable=local-storage --node-ip=192.168.50.79&quot; --ssh-key /home/owner/.ssh/id_ed25519
+#then join workers
+owner@DESKTOP-0V6SF20:~$ k3sup join --ip=192.168.50.84 --user=root --k3s-channel stable --server-ip 192.168.50.200 --k3s-extra-args &quot;--node-ip=192.168.50.84&quot; --ssh-key /home/owner/.ssh/id_ed25519
+# upgrade operator (plans too)
+kubectl apply -f https://github.com/rancher/system-upgrade-controller/releases/latest/download/system-upgrade-controller.yaml
+-- tried to do it within kube-vip but got stuck in pending for load balancer. my guess is that when I made the HA control plane I needed &quot;--services&quot; too.
+https://kube-vip.io/docs/installation/static/
+
+try guide again? https://devopstales.github.io/kubernetes/k3s-etcd-kube-vip/
+kubectl apply -f https://raw.githubusercontent.com/kube-vip/kube-vip-cloud-provider/main/manifest/kube-vip-cloud-controller.yaml
+kubectl create configmap -n kube-system kubevip --from-literal range-global=192.168.50.210-192.168.50.220
+---
+kubectl create namespace metallb-system
+kubectl create secret generic -n metallb-system memberlist --from-literal=secretkey=&quot;$(openssl rand -base64 128)&quot;
+kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/v0.13.7/config/manifests/metallb-native.yaml
+apiVersion: metallb.io/v1beta1
+kind: IPAddressPool
+metadata:
+  name: first-pool
+  namespace: metallb-system
+spec:
+  addresses:
+  - 192.168.50.210-192.168.50.220
+---
+apiVersion: metallb.io/v1beta1
+kind: L2Advertisement
+metadata:
+  name: l2advertisement
+  namespace: metallb-system
+spec:
+  ipAddressPools:
+   - first-pool
+
+# deploy storage (nfs or longhorn) . label the node you want the longhorn deployed on (storage=longhorn)
+kubectl apply -f https://raw.githubusercontent.com/longhorn/longhorn/v1.4.0/deploy/longhorn.yaml (better to pull it down locally first to edit the number of replicas)
+
+# registry deploy (need to update /etc/hosts in advance and /etc/rancher/k3s/registries.yaml on all nodes so don&apos;t need to use https)  or
+https://cwienczek.com/2020/06/import-images-to-k3s-without-docker-registry/ .. need to label the nodes you want with &quot;node-type: worker&quot;
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: docker-registry
+  labels:
+    name: docker-registry
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: longhorn-docker-registry-pvc
+  namespace: docker-registry
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: longhorn
+  resources:
+    requests:
+      storage: 10Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: registry
+  namespace: docker-registry
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: registry
+  template:
+    metadata:
+      labels:
+        app: registry
+        name: registry
+    spec:
+      nodeSelector:
+        node-type: worker
+      containers:
+      - name: registry
+        image: registry:2
+        env:
+        - name: REGISTRY_STORAGE_DELETE_ENABLED
+          value: &quot;true&quot;
+        ports:
+        - containerPort: 5000
+        volumeMounts:
+        - name: volv
+          mountPath: /var/lib/registry
+          subPath: registry
+      volumes:
+        - name: volv
+          persistentVolumeClaim:
+            claimName: longhorn-docker-registry-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: registry-service
+  namespace: docker-registry
+spec:
+  selector:
+    app: registry
+  type: LoadBalancer
+  ports:
+    - name: docker-port
+      protocol: TCP
+      port: 5000
+      targetPort: 5000
+  loadBalancerIP: 192.168.50.207
+
+
+#/etc/rancher/k3s/registries.yaml
+mirrors:
+  &quot;registry.testbed.lan&quot;:
+    endpoint:
+      - &quot;http://registry.testbed.lan:5000&quot;</code></pre>]]></content:encoded></item><item><title><![CDATA[Motorola MB8611 Stats]]></title><description><![CDATA[<p>Not the best code but it works. To get all the header info, login while developer tools is open in chrome and then copy the request parameters. Output is consumed by telegraf</p><pre><code class="language-perl">#!/usr/bin/perl -w
+use strict;
+use LWP::Simple;
+use JSON qw( decode_json encode_json);
+my $url</code></pre>]]></description><link>https://teada.net/motorola-mb8611-stats/</link><guid isPermaLink="false">64f9e5eadbcfb0000166e240</guid><dc:creator><![CDATA[Brian]]></dc:creator><pubDate>Sat, 04 Dec 2021 15:33:34 GMT</pubDate><content:encoded><![CDATA[<p>Not the best code but it works. To get all the header info, login while developer tools is open in chrome and then copy the request parameters. Output is consumed by telegraf</p><pre><code class="language-perl">#!/usr/bin/perl -w
+use strict;
+use LWP::Simple;
+use JSON qw( decode_json encode_json);
+my $url = &apos;https://192.168.100.1/HNAP1/&apos;;
+# Headers from developer tools
+my $ns_headers = [
+&apos;User-Agent&apos; =&gt; &apos;Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:94.0) Gecko/20100101 Firefox/94.0&apos;,
+&apos;Accept&apos; =&gt; &apos;application/json&apos;,
+&apos;Accept-Language&apos; =&gt; &apos;en-US,en;q=0.5&apos;,
+&apos;Content-Type&apos; =&gt; &apos;application/json&apos;,
+&apos;SOAPACTION&apos; =&gt; &apos;&quot;http://purenetworks.com/HNAP1/GetMultipleHNAPs&quot;&apos;,
+&apos;HNAP_AUTH&apos; =&gt;  &apos;AUTH_STRING&apos;,
+&apos;Origin&apos; =&gt; &apos;https://192.168.100.1&apos;,
+&apos;Connection&apos; =&gt;  &apos;keep-alive&apos;,
+&apos;Referer&apos; =&gt; &apos;https://192.168.100.1/MotoStatusConnection.html&apos;,
+&apos;Cookie&apos; =&gt; &apos;Secure; Secure; uid=myuid;PrivateKey=PKEYHERE&apos;,
+&apos;Sec-Fetch-Dest&apos; =&gt; &apos;empty&apos;,
+&apos;Sec-Fetch-Mode&apos; =&gt; &apos;cors&apos;,
+&apos;Sec-Fetch-Site&apos; =&gt; &apos;same-origin&apos;
+];
+
+my $DEBUG = 0;
+my %mapping;
+my $ua = LWP::UserAgent-&gt;new();
+$ua-&gt;ssl_opts(SSL_verify_mode =&gt; 0x00, verify_hostname =&gt; 0);
+my $payload = {&quot;GetMultipleHNAPs&quot; =&gt; {&quot;GetHomeConnection&quot; =&gt; &quot;&quot;,&quot;GetHomeAddress&quot; =&gt; &quot;&quot;}};
+my $encode = encode_json($payload);
+my $result = grab_stats($encode);
+for my $info (keys %{$result-&gt;{&quot;GetHomeConnectionResponse&quot;}}) {
+  print &quot;$info : &quot; . $result-&gt;{&quot;GetHomeConnectionResponse&quot;}-&gt;{$info} .&quot;\n&quot; if $DEBUG;
+}
+# Downstream
+$payload = {&quot;GetMultipleHNAPs&quot; =&gt; {&quot;GetMotoStatusDownstreamChannelInfo&quot; =&gt; &quot;&quot;,&quot;GetMotoStatusUpstreamChannelInfo&quot; =&gt; &quot;&quot;}};
+$encode = encode_json($payload);
+$result = grab_stats($encode);
+my $decode = $result-&gt;{&quot;GetMotoStatusDownstreamChannelInfoResponse&quot;}-&gt;{&quot;MotoConnDownstreamChannel&quot;};
+my @indx = split(/\+/, $decode);
+print &quot;Downstream\n&quot; if $DEBUG;
+my $poststr = &quot;&quot;;
+foreach my $chan (@indx) {
+  my @items = split(/\^/, $chan);
+  $items[0] =~ s/\|//g;
+  print &quot;Channel $items[0] Lock-status $items[1] Modulation $items[2] ID $items[3] Freq(mhz) $items[4] Pwr(dbmv) $items[5] SNR (db) $items[6] Corrected $items[7] Uncorrected $items[8]\n&quot; if $DEBUG; 
+  my $mod = $items[2];
+  $mod =~ s/ /_/g;
+  #I see occasional spaces, remove &apos;em
+  my $pwr = $items[5];
+  $pwr =~ s/^\s+//;
+  $poststr .= &quot;modem_down,downchannel=$items[0],status=$items[1],modulation=$mod freq=$items[4],pwr=$pwr,snr=$items[6],corrected=$items[7],uncorrected=$items[8]\n&quot;;
+}
+# Upstream
+$decode = $result-&gt;{&quot;GetMotoStatusUpstreamChannelInfoResponse&quot;}-&gt;{&quot;MotoConnUpstreamChannel&quot;};
+@indx = split(/\+/, $decode);
+print &quot;Upstream\n&quot; if $DEBUG;
+foreach my $chan (@indx) {
+  my @items = split(/\^/, $chan);
+  $items[0] =~ s/\|//g;
+  print &quot;Channel $items[0] Lock-status $items[1] Type $items[2] ID $items[3] Symb rate $items[4] Freq(mhz) $items[5] Pwr (dbmv) $items[6]\n&quot; if $DEBUG;
+  $poststr .=&quot;modem_up,upchannel=$items[0],status=$items[1],type=$items[2] symb_rate=$items[4],freq=$items[5],pwr=$items[6]\n&quot;;
+}
+print $poststr;
+
+sub grab_stats {
+ my $encode = shift;
+ my $r = HTTP::Request-&gt;new(&apos;POST&apos;, $url, $ns_headers, $encode);
+ my $res = $ua-&gt;request($r);
+ my $decode = decode_json($res-&gt;decoded_content);
+ return $decode-&gt;{&quot;GetMultipleHNAPsResponse&quot;};
+}</code></pre>]]></content:encoded></item><item><title><![CDATA[Kubernetes Goat]]></title><description><![CDATA[<p>Decided to play with this learning exercise using kind (kubernetes in docker)</p><p>Prereq (docker, helm2, kubectl, kind):</p><p>Install docker for your distro: <a href="https://docs.docker.com/engine/install/ubuntu/?ref=teada.net">https://docs.docker.com/engine/install/ubuntu/</a></p><pre><code>wget https://get.helm.sh/helm-v2.17.0-linux-amd64.tar.gz
+curl -LO &quot;https://dl.k8s.io/release/$(curl -L -s</code></pre>]]></description><link>https://teada.net/kubernetes-goat/</link><guid isPermaLink="false">64f9e5eadbcfb0000166e23f</guid><dc:creator><![CDATA[Brian]]></dc:creator><pubDate>Sun, 06 Jun 2021 16:07:30 GMT</pubDate><content:encoded><![CDATA[<p>Decided to play with this learning exercise using kind (kubernetes in docker)</p><p>Prereq (docker, helm2, kubectl, kind):</p><p>Install docker for your distro: <a href="https://docs.docker.com/engine/install/ubuntu/?ref=teada.net">https://docs.docker.com/engine/install/ubuntu/</a></p><pre><code>wget https://get.helm.sh/helm-v2.17.0-linux-amd64.tar.gz
+curl -LO &quot;https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl&quot;
+curl -Lo ./kind https://kind.sigs.k8s.io/dl/v0.11.0/kind-linux-amd64
+tar xf helm-v2.17.0-linux-amd64.tar.gz
+sudo mv linux-amd64/helm /usr/local/bin/helm2
+sudo mv linux-amd64/tiller /usr/local/bin/
+sudo mv kubectl /usr/local/bin/
+sudo mv kind /usr/local/bin/
+
+sudo chmod +x /usr/local/bin/kind
+sudo chmod +x /usr/local/bin/kubectl
+sudo chmod +x /usr/local/bin/tiller
+sudo chmod +x /usr/local/bin/helm2</code></pre><p>Clone the git repo. If you are not part of the docker group, you need to use sudo before the bash command to import the kind image into docker</p><pre><code>git clone https://github.com/madhuakula/kubernetes-goat
+cd kubernetes-goat/kind-setup
+bash setup-kind-cluster-and-goat.sh
+</code></pre><p>Once setup is complete, run the <code>acceess-kubernetes-goat.sh</code> from the main git repo and follow along on the tutorial: <a href="https://madhuakula.com/kubernetes-goat/scenarios/scenario-1.html?ref=teada.net">https://madhuakula.com/kubernetes-goat/scenarios/scenario-1.html</a></p>]]></content:encoded></item><item><title><![CDATA[IPFS Stats]]></title><description><![CDATA[<p>This doesn&apos;t serve any real purpose. I just like seeing trends of the tcp/udp connections to the IPFS network. Yes I get lazy at the end with a system call.</p><pre><code>#!/usr/bin/perl
+
+use warnings;
+use strict;
+
+my %peers;
+my $DEST = &quot;INFLXUDBIP&quot;;
+my $HOSTNAME = &quot;</code></pre>]]></description><link>https://teada.net/ipfs-stats/</link><guid isPermaLink="false">64f9e5eadbcfb0000166e23e</guid><dc:creator><![CDATA[Brian]]></dc:creator><pubDate>Thu, 19 Nov 2020 03:02:57 GMT</pubDate><content:encoded><![CDATA[<p>This doesn&apos;t serve any real purpose. I just like seeing trends of the tcp/udp connections to the IPFS network. Yes I get lazy at the end with a system call.</p><pre><code>#!/usr/bin/perl
+
+use warnings;
+use strict;
+
+my %peers;
+my $DEST = &quot;INFLXUDBIP&quot;;
+my $HOSTNAME = &quot;host-foo&quot;;
+open(FH, &quot;/usr/local/bin/ipfs swarm peers |&quot;) || die $!;
+while (my $line = &lt;FH&gt;) {
+  chomp($line);
+  #TCP
+  if ($line =~ /\/ip4\/(\d+\.\d+\.\d+\.\d+)\/tcp\/(\d+)\/p2p\/(\S+)/) {
+     $peers{&quot;tcp&quot;}++;
+  }
+  #UDP
+  if ($line =~ /\/ip4\/(\d+\.\d+\.\d+\.\d+)\/udp\/(\d+)\/quic\/p2p\/(\S+)/) {
+     $peers{&quot;udp&quot;}++;
+  }
+}
+
+close(FH);
+
+my $poststr = &quot;ipfs,host=$HOSTNAME tcp=$peers{tcp},udp=$peers{udp},total=&quot; . ($peers{tcp}+$peers{udp}) . &quot;&quot;;
+system(&quot;curl -X POST --data-binary \&quot;$poststr\&quot; http://$DEST:8086/write?db=mydb&quot;);</code></pre>]]></content:encoded></item><item><title><![CDATA[RKE - Bootstrap]]></title><description><![CDATA[<p>Notes for rebuilding. Wireguard has been setup in advance between the nodes and is used for internal communication on the cluster</p><pre><code>nodes:
+    - address: PUBLIC_IP_1
+      user: root
+      hostname_override: master
+      ssh_key_path: ~/rootkey.pem
+      internal_address: 10.10.10.1
+      role:
+        - controlplane
+        - etcd
+    - address:</code></pre>]]></description><link>https://teada.net/rke-bootstrap/</link><guid isPermaLink="false">64f9e5eadbcfb0000166e23d</guid><dc:creator><![CDATA[Brian]]></dc:creator><pubDate>Mon, 05 Oct 2020 21:53:06 GMT</pubDate><content:encoded><![CDATA[<p>Notes for rebuilding. Wireguard has been setup in advance between the nodes and is used for internal communication on the cluster</p><pre><code>nodes:
+    - address: PUBLIC_IP_1
+      user: root
+      hostname_override: master
+      ssh_key_path: ~/rootkey.pem
+      internal_address: 10.10.10.1
+      role:
+        - controlplane
+        - etcd
+    - address: PUBLIC_IP_2
+      user: root
+      hostname_override: worker01
+      ssh_key_path: ~/rootkey.pem
+      internal_address: 10.10.10.2
+      role:
+        - worker
+
+network:
+    plugin: canal
+    options:
+        canal_iface: wg0
+        canal_flannel_backend_type: vxlan
+
+cluster_name: cac
+addon_job_timeout: 300</code></pre>]]></content:encoded></item><item><title><![CDATA[Minio - Kubernetes]]></title><description><![CDATA[<pre><code>apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: minio
+  labels:
+    app: minio
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: minio
+  template:
+    metadata:
+      labels:
+        app: minio
+    spec:
+      containers:
+      - name: minio
+        image: minio/minio
+        env:
+        - name: MINIO_ACCESS_KEY
+          value: &quot;minio&quot;
+        - name: MINIO_SECRET_KEY
+          value: &quot;minio123&quot;</code></pre>]]></description><link>https://teada.net/minio-kubernetes/</link><guid isPermaLink="false">64f9e5eadbcfb0000166e23c</guid><dc:creator><![CDATA[Brian]]></dc:creator><pubDate>Sun, 31 May 2020 14:09:43 GMT</pubDate><content:encoded><![CDATA[<pre><code>apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: minio
+  labels:
+    app: minio
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: minio
+  template:
+    metadata:
+      labels:
+        app: minio
+    spec:
+      containers:
+      - name: minio
+        image: minio/minio
+        env:
+        - name: MINIO_ACCESS_KEY
+          value: &quot;minio&quot;
+        - name: MINIO_SECRET_KEY
+          value: &quot;minio123&quot;
+        ports:
+        - containerPort: 9000
+        volumeMounts:
+        - name: minio-data
+          mountPath: /data
+        args: [&quot;server&quot;, &quot;/data&quot;]
+      volumes:
+      - name: minio-data
+        persistentVolumeClaim:
+          claimName: minio-data
+---
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: minio-data
+  labels:
+    k8s-app: minio
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: minio
+spec:
+  selector:
+    app: minio
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 9000
+---
+apiVersion: networking.k8s.io/v1beta1
+kind: Ingress
+metadata:
+  name: minio
+  annotations:
+    kubernetes.io/ingress.class: &quot;traefik&quot;
+    traefik.frontend.rule.type: &quot;PathPrefix&quot;
+spec:
+  rules:
+  - http:
+      paths:
+      - path: /minio
+        backend:
+          serviceName: minio
+          servicePort: 80</code></pre>]]></content:encoded></item><item><title><![CDATA[Kubernetes - Pihole]]></title><description><![CDATA[<pre><code>apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pihole-adlists
+data:
+  adlists.list: |
+    https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts
+    https://mirror1.malwaredomains.com/files/justdomains
+    http://sysctl.org/cameleon/hosts
+    https://s3.amazonaws.com/lists.disconnect.me/simple_tracking.txt
+    https://s3.amazonaws.com/lists.disconnect.me/simple_ad.txt
+    https:</code></pre>]]></description><link>https://teada.net/kubernetes-2/</link><guid isPermaLink="false">64f9e5f4dbcfb0000166e2cd</guid><dc:creator><![CDATA[Brian]]></dc:creator><pubDate>Thu, 05 Mar 2020 22:30:37 GMT</pubDate><content:encoded><![CDATA[<pre><code>apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pihole-adlists
+data:
+  adlists.list: |
+    https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts
+    https://mirror1.malwaredomains.com/files/justdomains
+    http://sysctl.org/cameleon/hosts
+    https://s3.amazonaws.com/lists.disconnect.me/simple_tracking.txt
+    https://s3.amazonaws.com/lists.disconnect.me/simple_ad.txt
+    https://blocklist.site/app/dl/ads
+    https://blocklist.site/app/dl/fraud
+    https://blocklist.site/app/dl/fakenews
+    https://blocklist.site/app/dl/malware
+    https://blocklist.site/app/dl/phishing
+    https://blocklist.site/app/dl/ransomware
+    https://blocklist.site/app/dl/scam
+    https://blocklist.site/app/dl/spam
+    https://blocklist.site/app/dl/facebook
+    https://blocklist.site/app/dl/youtube
+    https://reddestdream.github.io/Projects/MinimalHosts/etc/MinimalHostsBlocker/minimalhosts
+    https://raw.githubusercontent.com/StevenBlack/hosts/master/data/KADhosts/hosts
+    https://raw.githubusercontent.com/StevenBlack/hosts/master/data/add.Spam/hosts
+    https://v.firebog.net/hosts/static/w3kbl.txt
+    https://adaway.org/hosts.txt
+    https://v.firebog.net/hosts/AdguardDNS.txt
+    https://raw.githubusercontent.com/anudeepND/blacklist/master/adservers.txt
+    https://s3.amazonaws.com/lists.disconnect.me/simple_ad.txt
+    https://v.firebog.net/hosts/Easylist.txt
+    https://pgl.yoyo.org/adservers/serverlist.php?hostformat=hosts;showintro=0
+    https://raw.githubusercontent.com/StevenBlack/hosts/master/data/UncheckyAds/hosts
+    https://www.squidblacklist.org/downloads/dg-ads.acl
+    https://v.firebog.net/hosts/Easyprivacy.txt
+    https://v.firebog.net/hosts/Prigent-Ads.txt
+    https://gitlab.com/quidsup/notrack-blocklists/raw/master/notrack-blocklist.txt
+    https://raw.githubusercontent.com/StevenBlack/hosts/master/data/add.2o7Net/hosts
+    https://raw.githubusercontent.com/crazy-max/WindowsSpyBlocker/master/data/hosts/spy.txt
+    https://s3.amazonaws.com/lists.disconnect.me/simple_malvertising.txt
+    https://mirror1.malwaredomains.com/files/justdomains
+    https://mirror.cedia.org.ec/malwaredomains/immortal_domains.txt
+    https://www.malwaredomainlist.com/hostslist/hosts.txt
+    https://bitbucket.org/ethanr/dns-blacklists/raw/8575c9f96e5b4a1308f2f12394abd86d0927a4a0/bad_lists/Mandiant_APT1_Report_Appendix_D.txt
+    https://v.firebog.net/hosts/Prigent-Malware.txt
+    https://v.firebog.net/hosts/Prigent-Phishing.txt
+    https://phishing.army/download/phishing_army_blocklist_extended.txt
+    https://gitlab.com/quidsup/notrack-blocklists/raw/master/notrack-malware.txt
+    https://ransomwaretracker.abuse.ch/downloads/RW_DOMBL.txt
+    https://ransomwaretracker.abuse.ch/downloads/CW_C2_DOMBL.txt
+    https://ransomwaretracker.abuse.ch/downloads/LY_C2_DOMBL.txt
+    https://ransomwaretracker.abuse.ch/downloads/TC_C2_DOMBL.txt
+    https://ransomwaretracker.abuse.ch/downloads/TL_C2_DOMBL.txt
+    https://v.firebog.net/hosts/Shalla-mal.txt
+    https://raw.githubusercontent.com/StevenBlack/hosts/master/data/add.Risk/hosts
+    https://www.squidblacklist.org/downloads/dg-malicious.acl
+    https://zerodot1.gitlab.io/CoinBlockerLists/hosts
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pihole-regex
+data:
+  regex.list: |
+    ^(.+[-_.])??adse?rv(er?|ice)?s?[0-9]*[-.]
+    ^(.+[-_.])??m?ad[sxv]?[0-9]*[-_.]
+    ^(.+[-_.])??telemetry[-.]
+    ^(.+[-_.])??xn--
+    ^adim(age|g)s?[0-9]*[-_.]
+    ^adtrack(er|ing)?[0-9]*[-.]
+    ^advert(s|is(ing|ements?))?[0-9]*[-_.]
+    ^aff(iliat(es?|ion))?[-.]
+    ^analytics?[-.]
+    ^banners?[-.]
+    ^beacons?[0-9]*[-.]
+    ^count(ers?)?[0-9]*[-.]
+    ^pixels?[-.]
+    ^stat(s|istics)?[0-9]*[-.]
+    ^track(ers?|ing)?[0-9]*[-.]
+    ^traff(ic)?[-.]
+    ^(.*)\.g00\.(.*)
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pihole-env
+data:
+  TZ: EST
+  DNS1: 127.0.0.1#5054
+  DNS2: 127.0.0.1#5054
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pihole
+  labels:
+    app: pihole
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: pihole
+  template:
+    metadata:
+      labels:
+        app: pihole
+    spec:
+      containers:
+      - name:  pihole-cloudflared
+        image: visibilityspots/cloudflared:amd64
+        resources:
+          requests:
+            memory: &quot;64Mi&quot;
+            cpu: &quot;250m&quot;
+          limits:
+            memory: &quot;128Mi&quot;
+            cpu: &quot;500m&quot;
+      - name: pihole
+        image: pihole/pihole
+        resources:
+          requests:
+            memory: &quot;64Mi&quot;
+            cpu: &quot;250m&quot;
+          limits:
+            memory: &quot;128Mi&quot;
+            cpu: &quot;500m&quot;
+        env:
+        - name: TZ
+          valueFrom:
+            configMapKeyRef:
+              name: pihole-env
+              key: TZ
+        - name: DNS1
+          valueFrom:
+            configMapKeyRef:
+              name: pihole-env
+              key: DNS1
+        - name: DNS2
+          valueFrom:
+            configMapKeyRef:
+              name: pihole-env
+              key: DNS2
+        ports:
+        - name: web
+          containerPort: 80
+        - name : dns
+          protocol : UDP
+          containerPort: 53
+        volumeMounts:
+        - name: pihole-adlists
+          mountPath: /etc/pihole/adlists.list
+          subPath: adlists.list
+        - name: pihole-regex
+          mountPath: /etc/pihole/regex.list
+          subPath: regex.list
+      volumes:
+        - name: pihole-adlists
+          configMap:
+            name: pihole-adlists
+        - name: pihole-regex
+          configMap:
+            name: pihole-regex
+---
+kind: Service
+apiVersion: v1
+metadata:
+  name: pihole-web-service
+spec:
+  selector:
+    app: pihole
+  ports:
+  - protocol: TCP
+    port: 80
+    targetPort: 80
+    name : web
+  type: LoadBalancer
+---
+kind: Service
+apiVersion: v1
+metadata:
+  name: pihole-dns-service
+spec:
+  selector:
+    app: pihole
+  ports:
+  - protocol: UDP
+    port: 53
+    targetPort: 53
+    name : dns
+  type: LoadBalancer</code></pre>]]></content:encoded></item><item><title><![CDATA[Kubernetes - Tautulli]]></title><description><![CDATA[<pre><code>apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tautulli
+  labels:
+    app: tautulli
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: tautulli
+  template:
+    metadata:
+      labels:
+        app: tautulli
+    spec:
+      containers:
+        - name: tautulli
+          image: linuxserver/tautulli
+          env:
+            - name: TZ
+              value: &quot;America/New_York&quot;
+          resources:
+            limits:
+              memory: &quot;1Gi&quot;
+            requests:
+              memory: &quot;</code></pre>]]></description><link>https://teada.net/k3s-2/</link><guid isPermaLink="false">64f9e5eadbcfb0000166e239</guid><dc:creator><![CDATA[Brian]]></dc:creator><pubDate>Thu, 05 Mar 2020 22:29:58 GMT</pubDate><content:encoded><![CDATA[<pre><code>apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tautulli
+  labels:
+    app: tautulli
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: tautulli
+  template:
+    metadata:
+      labels:
+        app: tautulli
+    spec:
+      containers:
+        - name: tautulli
+          image: linuxserver/tautulli
+          env:
+            - name: TZ
+              value: &quot;America/New_York&quot;
+          resources:
+            limits:
+              memory: &quot;1Gi&quot;
+            requests:
+              memory: &quot;512Mi&quot;
+          ports:
+            - containerPort: 8181
+              name: tautulli-web
+          volumeMounts:
+            - mountPath: /config
+              name: tautulli-config
+              subPath: tautulli
+      volumes:
+        - name: tautulli-config
+          persistentVolumeClaim:
+            claimName: tautulli-config
+---
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: tautulli-config
+  labels:
+    k8s-app: tautulli
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+---
+kind: Service
+apiVersion: v1
+metadata:
+  name: tautulli
+spec:
+  selector:
+    app: tautulli
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 8181
+      name: tautulli-web
+  type: LoadBalancer</code></pre>]]></content:encoded></item><item><title><![CDATA[Bootstrap Salt]]></title><description><![CDATA[<p>Now for something different. If you have a VPS provider that allows you to use a custom script after the networking layer is up, here is a quick way to install salt. On debian.</p><pre><code class="language-code">wget -O - https://repo.saltstack.com/py3/debian/9/amd64/latest/SALTSTACK-GPG-KEY.pub | apt-key add</code></pre>]]></description><link>https://teada.net/bootstrap-salt/</link><guid isPermaLink="false">64f9e5eadbcfb0000166e238</guid><dc:creator><![CDATA[Brian]]></dc:creator><pubDate>Fri, 03 Jan 2020 21:46:26 GMT</pubDate><content:encoded><![CDATA[<p>Now for something different. If you have a VPS provider that allows you to use a custom script after the networking layer is up, here is a quick way to install salt. On debian.</p><pre><code class="language-code">wget -O - https://repo.saltstack.com/py3/debian/9/amd64/latest/SALTSTACK-GPG-KEY.pub | apt-key add -
+echo &quot;deb http://repo.saltstack.com/py3/debian/9/amd64/latest stretch main&quot; &gt; /etc/apt/sources.list.d/saltstack.list
+apt-get update
+apt-get install -y salt-minion curl
+sed -i &apos;s/#master: salt/master: IP_OF_MASTER/&apos; /etc/salt/minion
+ADDR=`curl http://ifconfig.me | sed &apos;s/\./-/g&apos;`
+echo &quot;ip-$ADDR&quot; &gt; /etc/hostname
+sed -i &quot;s/debian/ip-$ADDR/&quot; /etc/hosts
+sed -i &quot;s/#id:/id: ip-$ADDR/&quot; /etc/salt/minion
+sed -i &apos;s/#reactor_worker_threads: 10/reactor_worker_threads: 1/&apos; /etc/salt/minion
+systemctl restart salt-minion</code></pre>]]></content:encoded></item><item><title><![CDATA[Ghost on k3s/k8s]]></title><description><![CDATA[<p>You could use helm or just a simple yaml since this is small. Setting up ssl is a exercise left to the reader (use cert-manager). I use a cname for the ingress rule that points to the worker node(s)</p><pre><code>apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: blog
+  labels:
+    app:</code></pre>]]></description><link>https://teada.net/ghost-on-k3s-k8s/</link><guid isPermaLink="false">64f9e5eadbcfb0000166e237</guid><dc:creator><![CDATA[Brian]]></dc:creator><pubDate>Tue, 24 Dec 2019 22:14:31 GMT</pubDate><content:encoded><![CDATA[<p>You could use helm or just a simple yaml since this is small. Setting up ssl is a exercise left to the reader (use cert-manager). I use a cname for the ingress rule that points to the worker node(s)</p><pre><code>apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: blog
+  labels:
+    app: blog
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: blog
+  template:
+    metadata:
+      labels:
+        app: blog
+    spec:
+      containers:
+      - name: blog
+        image: ghost:3.2-alpine
+        volumeMounts:
+        - mountPath: /var/lib/ghost/content
+          name: content
+        ports:
+        - containerPort: 2368
+        env:
+        - name: url
+          value: http://hello.teada.net
+      volumes:
+      - name: content
+        persistentVolumeClaim:
+          claimName: blog-content
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: blog
+spec:
+  type: ClusterIP
+  selector:
+    app: blog
+  ports:
+  - protocol: TCP
+    port: 80
+    targetPort: 2368
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: blog-content
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+  storageClassName: local-path
+---
+apiVersion: networking.k8s.io/v1beta1
+kind: Ingress
+metadata:
+  name: hello
+spec:
+  rules:
+  - host: hello.teada.net
+    http:
+      paths:
+      - path: /
+        backend:
+          serviceName: blog
+          servicePort: 80</code></pre>]]></content:encoded></item><item><title><![CDATA[Kubernetes - OpenRCT2]]></title><description><![CDATA[<p>Had to do hacky work-arounds using the configmaps since they are read-only and I didn&apos;t want a separate config.ini file</p><pre><code>kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: openrct2-config
+data:
+  config.ini: |
+    [general]
+    show_fps = true
+    currency_format = USD
+    date_format = MM/DD/YY
+    language = en-US
+    temperature_format = FAHRENHEIT</code></pre>]]></description><link>https://teada.net/kubernetes-openrct2/</link><guid isPermaLink="false">64f9e5eadbcfb0000166e236</guid><dc:creator><![CDATA[Brian]]></dc:creator><pubDate>Tue, 05 Nov 2019 12:10:10 GMT</pubDate><content:encoded><![CDATA[<p>Had to do hacky work-arounds using the configmaps since they are read-only and I didn&apos;t want a separate config.ini file</p><pre><code>kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: openrct2-config
+data:
+  config.ini: |
+    [general]
+    show_fps = true
+    currency_format = USD
+    date_format = MM/DD/YY
+    language = en-US
+    temperature_format = FAHRENHEIT
+    measurement_format = IMPERIAL
+    auto_open_shops = true
+    show_guest_purchases = true
+
+    [network]
+    player_name = &quot;Player&quot;
+    advertise = true
+    default_port = 11753
+    maxplayers = 8
+    server_name = &quot;Kubernetes Playground&quot;
+    server_description = &quot;Kubernetes Hosted&quot;
+    server_greeting = &quot;Welcome!&quot;
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: openrct2
+  labels:
+    app: openrct2
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: openrct2
+  template:
+    metadata:
+      labels:
+        app: openrct2
+    spec:
+      containers:
+      - name: openrct2
+        image: openrct2/openrct2-cli:0.2.4
+        readinessProbe:
+          tcpSocket:
+            port: 11753
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        args: [&quot;host&quot;, &quot;/home/openrct2/.config/OpenRCT2/save/oxbrowlake.sv6&quot;, &quot;--headless&quot;]
+        volumeMounts:
+        - name: save-data
+          mountPath: /home/openrct2/.config/OpenRCT2/save
+        - name: openrct2-conf
+          mountPath: /home/openrct2/.config/OpenRCT2/config.ini
+          subPath: config.ini
+        resources:
+          limits:
+            memory: 512Mi
+          requests:
+            memory: 256Mi
+        ports:
+        - containerPort: 11753
+      initContainers:
+      - name: dlpark
+        image: busybox
+        command: [&quot;wget&quot;, &quot;-O&quot;, &quot;/work/oxbrowlake.sv6&quot;, &quot;https://downloads.rctgo.com/scenarios/2017-10/17352/Oxbrow Lake Park.sc6&quot;]
+        volumeMounts:
+        - name: save-data
+          mountPath: /work
+      - name: permissions
+        image: busybox
+        command: [&quot;sh&quot;, &quot;-c&quot;, &quot;cp /conf/config.ini /work/config.ini; chown 1000:1000 /work/config.ini&quot;]
+        volumeMounts:
+        - name: openrct2-conf
+          mountPath: /work
+        - name: openrct2-config
+          mountPath: /conf/config.ini
+          subPath: config.ini
+      volumes:
+      - name: save-data
+        emptyDir: {}
+      - name: openrct2-conf
+        emptyDir: {}
+      - name: openrct2-config
+        configMap:
+          name: openrct2-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: openrct2
+spec:
+  selector:
+    app: openrct2
+  ports:
+    - protocol: TCP
+      port: 11753
+      targetPort: 11753
+  type: LoadBalancer</code></pre>]]></content:encoded></item><item><title><![CDATA[Crack bcrypt using multiple cores]]></title><description><![CDATA[<p>Using random pastebin examples I wrote a multi-core bcrypt. One bug to fix: after finding a match it doesn&apos;t exit early.</p><pre><code>#!/usr/bin/python3
+
+from passlib.hash import bcrypt
+import os
+import sys
+import io
+import multiprocessing
+
+def chunks(l, n):
+    return [l[i:i+n] for i</code></pre>]]></description><link>https://teada.net/crack-bcrypt-with-multiple-cpus/</link><guid isPermaLink="false">64f9e5eadbcfb0000166e235</guid><dc:creator><![CDATA[Brian]]></dc:creator><pubDate>Sat, 26 Oct 2019 16:37:55 GMT</pubDate><content:encoded><![CDATA[<p>Using random pastebin examples I wrote a multi-core bcrypt. One bug to fix: after finding a match it doesn&apos;t exit early.</p><pre><code>#!/usr/bin/python3
+
+from passlib.hash import bcrypt
+import os
+import sys
+import io
+import multiprocessing
+
+def chunks(l, n):
+    return [l[i:i+n] for i in range(0, len(l), n)]
+
+def do_job(job_id, data_slice):
+    for item in data_slice:
+        correct = bcrypt.verify(item, hash)
+        if (correct):
+            print(&quot;Found: {0}&quot;.format(item))
+            exit()
+
+def dispatch_jobs(data, job_number):
+    total = len(data)
+    chunk_size = total // job_number
+    slice = chunks(data, chunk_size)
+    jobs = []
+    for i, s in enumerate(slice):
+        j = multiprocessing.Process(target=do_job, args=(i, s))
+        jobs.append(j)
+    for j in jobs:
+        j.start()
+        
+if __name__ == &apos;__main__&apos;:
+    num_processes = multiprocessing.cpu_count()
+    with io.open(&quot;orig.txt&quot;,&quot;r&quot;,encoding=&quot;ISO-8859-1&quot;) as f:
+        words = f.read().splitlines()
+
+    hash = input(&apos;hash to crack: &apos;)
+    dispatch_jobs(words, num_processes)</code></pre>]]></content:encoded></item></channel></rss>
